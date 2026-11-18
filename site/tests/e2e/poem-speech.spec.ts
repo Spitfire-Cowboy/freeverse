@@ -8,6 +8,7 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
       utterances: [] as MockUtterance[],
       voices: [{ lang: "en-US", localService: true }],
       voicesChanged: null as (() => void) | null,
+      staleOnEnd: null as (() => void) | null,
     };
     class MockUtterance {
       lang = "";
@@ -49,7 +50,7 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
     state.voicesChanged?.();
   });
   await expect(button).toBeDisabled();
-  await expect(status).toHaveText("Ready to read this poem aloud.");
+  await expect(status).toBeEmpty();
   await expect(unavailable).toHaveText("No local voice is available for this poem's language.");
 
   await page.evaluate(() => {
@@ -104,7 +105,8 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
   expect(await page.evaluate(() => (window as typeof window & { __speechState: { spoken: unknown[] } }).__speechState.spoken.length)).toBe(spokenBeforeRestart + 2);
 
   await page.evaluate(() => {
-    const state = (window as typeof window & { __speechState: { voices: unknown[]; voicesChanged: (() => void) | null } }).__speechState;
+    const state = (window as typeof window & { __speechState: { utterances: Array<{ onend: (() => void) | null }>; staleOnEnd: (() => void) | null; voices: unknown[]; voicesChanged: (() => void) | null } }).__speechState;
+    state.staleOnEnd = state.utterances.at(-1)?.onend ?? null;
     state.voices = [];
     state.voicesChanged?.();
   });
@@ -132,6 +134,28 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
   await expect(button).toBeEnabled();
   await expect(status).toHaveText("Reading stopped.");
   await expect(unavailable).toBeEmpty();
+
+  await button.click();
+  const spokenBeforeStaleCallback = await page.evaluate(() => (window as typeof window & { __speechState: { spoken: unknown[] } }).__speechState.spoken.length);
+  await page.evaluate(() => {
+    const state = (window as typeof window & { __speechState: { staleOnEnd: (() => void) | null } }).__speechState;
+    state.staleOnEnd?.();
+  });
+  await page.clock.runFor(550);
+  expect(await page.evaluate(() => (window as typeof window & { __speechState: { spoken: unknown[] } }).__speechState.spoken.length)).toBe(spokenBeforeStaleCallback);
+  await expect(button).toHaveAttribute("data-listening", "true");
+
+  await page.evaluate(() => {
+    const state = (window as typeof window & { __speechState: { utterances: Array<{ onend: (() => void) | null }>; voices: unknown[]; voicesChanged: (() => void) | null } }).__speechState;
+    state.voices = [];
+    state.voicesChanged?.();
+    state.utterances.at(-1)?.onend?.();
+  });
+  await page.clock.runFor(550);
+  await expect(button).toHaveAttribute("data-listening", "false");
+  await expect(button).toBeDisabled();
+  await expect(status).toHaveText("Reading stopped because no local voice is available for this poem's language.");
+  await expect(unavailable).toHaveText("No local voice is available for this poem's language.");
 });
 
 test("disables read-aloud when the browser has no speech API", async ({ page }) => {
