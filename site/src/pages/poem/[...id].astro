@@ -667,7 +667,9 @@ const poemStructuredData = {
           const available = Boolean(selectVoice(synth.getVoices(), locale));
           listenButton.disabled = listening ? false : !available;
           listenButton.title = available || listening ? '' : NO_LOCAL_VOICE_MESSAGE;
-          listenUnavailable.textContent = !available && !listening ? NO_LOCAL_VOICE_MESSAGE : '';
+          listenUnavailable.textContent = !available && !listening && listenStatus.textContent !== VOICE_LOST_MESSAGE
+            ? NO_LOCAL_VOICE_MESSAGE
+            : '';
           if (!available && listenStatus.textContent === READY_MESSAGE) {
             listenStatus.textContent = '';
           } else if (available && listenStatus.textContent === '') {
@@ -680,8 +682,8 @@ const poemStructuredData = {
           if (pauseTimer !== undefined) window.clearTimeout(pauseTimer);
           synth?.cancel();
           setListening(false);
-          refreshVoiceAvailability();
           listenStatus.textContent = message;
+          refreshVoiceAvailability();
         };
 
         if (!synth || typeof Utterance !== 'function' || stanzas.length === 0) {

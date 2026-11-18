@@ -139,7 +139,8 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
   const spokenBeforeStaleCallback = await page.evaluate(() => (window as typeof window & { __speechState: { spoken: unknown[] } }).__speechState.spoken.length);
   await page.evaluate(() => {
     const state = (window as typeof window & { __speechState: { staleOnEnd: (() => void) | null } }).__speechState;
-    state.staleOnEnd?.();
+    if (!state.staleOnEnd) throw new Error("Expected a saved callback from the stopped session");
+    state.staleOnEnd();
   });
   await page.clock.runFor(550);
   expect(await page.evaluate(() => (window as typeof window & { __speechState: { spoken: unknown[] } }).__speechState.spoken.length)).toBe(spokenBeforeStaleCallback);
@@ -155,7 +156,7 @@ test("reads the poem with its text language and can stop", async ({ page }) => {
   await expect(button).toHaveAttribute("data-listening", "false");
   await expect(button).toBeDisabled();
   await expect(status).toHaveText("Reading stopped because no local voice is available for this poem's language.");
-  await expect(unavailable).toHaveText("No local voice is available for this poem's language.");
+  await expect(unavailable).toBeEmpty();
 });
 
 test("disables read-aloud when the browser has no speech API", async ({ page }) => {
