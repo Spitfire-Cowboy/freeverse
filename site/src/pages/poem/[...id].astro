@@ -103,7 +103,6 @@ const poemStructuredData = {
               data-poem-listen
               data-poem-language={poem.text_locale}
               aria-label="Listen to poem"
-              aria-pressed="false"
               aria-describedby="poem-listen-status"
             >
               <span aria-hidden="true">▶</span>
@@ -654,7 +653,7 @@ const poemStructuredData = {
 
         const setListening = (next: boolean) => {
           listening = next;
-          listenButton.setAttribute('aria-pressed', String(next));
+          listenButton.dataset.listening = String(next);
           listenButton.setAttribute('aria-label', next ? 'Stop listening' : 'Listen to poem');
           listenLabel.textContent = next ? 'Stop' : 'Listen';
           listenButton.querySelector('[aria-hidden="true"]')!.textContent = next ? '■' : '▶';
@@ -684,13 +683,20 @@ const poemStructuredData = {
             const utterance = new Utterance(stanzas[index]);
             utterance.lang = locale;
             const voice = selectVoice(synth.getVoices(), locale);
-            if (voice) utterance.voice = voice;
+            if (!voice) {
+              stop('No local voice is available for this poem\'s language.');
+              listenButton.disabled = true;
+              listenButton.title = 'No local voice is available for this poem\'s language.';
+              return;
+            }
+            utterance.voice = voice;
 
             utterance.onend = () => {
               if (!listening || activeSession !== session) return;
               pauseTimer = window.setTimeout(() => speakStanza(index + 1, activeSession), 550);
             };
             utterance.onerror = (event) => {
+              if (!listening || activeSession !== session) return;
               if (event.error === 'canceled' || event.error === 'interrupted') return;
               stop('This browser could not read the poem aloud.');
             };
@@ -709,6 +715,15 @@ const poemStructuredData = {
             listenStatus.textContent = `Reading ${stanzas.length === 1 ? 'the poem' : `${stanzas.length} stanzas`} aloud.`;
             speakStanza(0, session);
           });
+
+          const refreshVoiceAvailability = () => {
+            const available = Boolean(selectVoice(synth.getVoices(), locale));
+            listenButton.disabled = !available;
+            listenButton.title = available ? '' : 'No local voice is available for this poem\'s language.';
+            if (!available) listenStatus.textContent = listenButton.title;
+          };
+          synth.addEventListener('voiceschanged', refreshVoiceAvailability);
+          refreshVoiceAvailability();
 
           window.addEventListener('pagehide', () => stop(''));
         }

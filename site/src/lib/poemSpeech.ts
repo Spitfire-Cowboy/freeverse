@@ -1,5 +1,6 @@
 export type SpeechVoice = {
   lang: string;
+  localService: boolean;
 };
 
 export function splitPoemIntoStanzas(lines: string[]): string[] {
@@ -27,10 +28,11 @@ export function splitPoemIntoStanzas(lines: string[]): string[] {
 export function selectVoice<T extends SpeechVoice>(voices: T[], locale: string): T | undefined {
   const requested = locale.trim().toLowerCase().replaceAll("_", "-");
   if (!requested) return undefined;
+  const localVoices = voices.filter((voice) => voice.localService);
 
-  const exact = voices.find((voice) => voice.lang.toLowerCase().replaceAll("_", "-") === requested);
+  const exact = localVoices.find((voice) => voice.lang.toLowerCase().replaceAll("_", "-") === requested);
   if (exact) return exact;
 
   const language = requested.split("-")[0];
-  return voices.find((voice) => voice.lang.toLowerCase().replaceAll("_", "-").split("-")[0] === language);
+  return localVoices.find((voice) => voice.lang.toLowerCase().replaceAll("_", "-").split("-")[0] === language);
 }

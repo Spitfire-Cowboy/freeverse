@@ -791,7 +791,7 @@ main {
 }
 
 .reader-listen-btn:hover,
-.reader-listen-btn[aria-pressed="true"] {
+.reader-listen-btn[data-listening="true"] {
   background: color-mix(in oklab, var(--accent) 22%, var(--paper));
 }
 
