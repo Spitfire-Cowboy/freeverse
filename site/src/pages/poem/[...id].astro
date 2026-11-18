@@ -650,6 +650,8 @@ const poemStructuredData = {
         let session = 0;
         let pauseTimer: number | undefined;
         let listening = false;
+        const READY_MESSAGE = 'Ready to read this poem aloud.';
+        const NO_LOCAL_VOICE_MESSAGE = 'No local voice is available for this poem\'s language.';
 
         const setListening = (next: boolean) => {
           listening = next;
@@ -659,11 +661,24 @@ const poemStructuredData = {
           listenButton.querySelector('[aria-hidden="true"]')!.textContent = next ? '■' : '▶';
         };
 
+        const refreshVoiceAvailability = () => {
+          if (!synth) return;
+          const available = Boolean(selectVoice(synth.getVoices(), locale));
+          listenButton.disabled = listening ? false : !available;
+          listenButton.title = available || listening ? '' : NO_LOCAL_VOICE_MESSAGE;
+          if (!available && !listening) {
+            listenStatus.textContent = NO_LOCAL_VOICE_MESSAGE;
+          } else if (available && listenStatus.textContent === NO_LOCAL_VOICE_MESSAGE) {
+            listenStatus.textContent = READY_MESSAGE;
+          }
+        };
+
         const stop = (message = 'Reading stopped.') => {
           session += 1;
           if (pauseTimer !== undefined) window.clearTimeout(pauseTimer);
           synth?.cancel();
           setListening(false);
+          refreshVoiceAvailability();
           listenStatus.textContent = message;
         };
 
@@ -676,6 +691,7 @@ const poemStructuredData = {
             if (!listening || activeSession !== session) return;
             if (index >= stanzas.length) {
               setListening(false);
+              refreshVoiceAvailability();
               listenStatus.textContent = 'Finished reading the poem.';
               return;
             }
@@ -684,9 +700,7 @@ const poemStructuredData = {
             utterance.lang = locale;
             const voice = selectVoice(synth.getVoices(), locale);
             if (!voice) {
-              stop('No local voice is available for this poem\'s language.');
-              listenButton.disabled = true;
-              listenButton.title = 'No local voice is available for this poem\'s language.';
+              stop(NO_LOCAL_VOICE_MESSAGE);
               return;
             }
             utterance.voice = voice;
@@ -716,12 +730,6 @@ const poemStructuredData = {
             speakStanza(0, session);
           });
 
-          const refreshVoiceAvailability = () => {
-            const available = Boolean(selectVoice(synth.getVoices(), locale));
-            listenButton.disabled = !available;
-            listenButton.title = available ? '' : 'No local voice is available for this poem\'s language.';
-            if (!available) listenStatus.textContent = listenButton.title;
-          };
           synth.addEventListener('voiceschanged', refreshVoiceAvailability);
           refreshVoiceAvailability();
 
