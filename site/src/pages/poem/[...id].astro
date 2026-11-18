@@ -96,6 +96,19 @@ const poemStructuredData = {
       <div class="reader-head-row">
         <h1 class="reader-title">{poem.title}</h1>
         <div class="reader-actions">
+          {raw ? (
+            <button
+              type="button"
+              class="reader-listen-btn"
+              data-poem-listen
+              data-poem-language={poem.text_locale}
+              aria-label="Listen to poem"
+              aria-describedby="poem-listen-status poem-listen-unavailable"
+            >
+              <span aria-hidden="true">▶</span>
+              <span data-poem-listen-label>Listen</span>
+            </button>
+          ) : null}
           <div class="reader-mode-toggle" role="group" aria-label="Reader mode">
             <button type="button" class="reader-mode-btn" data-reader-mode-value="clean" aria-pressed="false">
               Clean page
@@ -129,6 +142,8 @@ const poemStructuredData = {
 
     {raw ? (
       <>
+        <p id="poem-listen-status" class="sr-only" aria-live="polite"></p>
+        <p id="poem-listen-unavailable" class="sr-only" aria-live="polite"></p>
         <p id="poem-reader-instructions" class="sr-only">
           Use Tab to move through poem lines. Press Enter or Space to select a line. Hold Shift while selecting a second line to create a shared range.
         </p>
@@ -617,6 +632,115 @@ const poemStructuredData = {
     </script>
 
     <script>
+      import { selectVoice, splitPoemIntoStanzas } from '../../lib/poemSpeech';
+
+      const listenButton = document.querySelector<HTMLButtonElement>('[data-poem-listen]');
+      const listenLabel = listenButton?.querySelector<HTMLElement>('[data-poem-listen-label]');
+      const listenStatus = document.querySelector<HTMLElement>('#poem-listen-status');
+      const listenUnavailable = document.querySelector<HTMLElement>('#poem-listen-unavailable');
+
+      if (listenButton && listenLabel && listenStatus && listenUnavailable) {
+        const synth = window.speechSynthesis;
+        const Utterance = window.SpeechSynthesisUtterance;
+        const locale = listenButton.dataset.poemLanguage || document.documentElement.lang || 'en';
+        const stanzaLines = Array.from(document.querySelectorAll<HTMLElement>('.poem-lines li')).map((line) =>
+          line.classList.contains('is-blank') ? '' : (line.querySelector<HTMLElement>('.line-text')?.textContent ?? '')
+        );
+        const stanzas = splitPoemIntoStanzas(stanzaLines);
+        let session = 0;
+        let pauseTimer: number | undefined;
+        let listening = false;
+        const READY_MESSAGE = 'Ready to read this poem aloud.';
+        const NO_LOCAL_VOICE_MESSAGE = 'No local voice is available for this poem\'s language.';
+        const VOICE_LOST_MESSAGE = 'Reading stopped because no local voice is available for this poem\'s language.';
+
+        const setListening = (next: boolean) => {
+          listening = next;
+          listenButton.dataset.listening = String(next);
+          listenButton.setAttribute('aria-label', next ? 'Stop listening' : 'Listen to poem');
+          listenLabel.textContent = next ? 'Stop' : 'Listen';
+          listenButton.querySelector('[aria-hidden="true"]')!.textContent = next ? '■' : '▶';
+        };
+
+        const refreshVoiceAvailability = () => {
+          if (!synth) return;
+          const available = Boolean(selectVoice(synth.getVoices(), locale));
+          listenButton.disabled = listening ? false : !available;
+          listenButton.title = available || listening ? '' : NO_LOCAL_VOICE_MESSAGE;
+          listenUnavailable.textContent = !available && !listening && listenStatus.textContent !== VOICE_LOST_MESSAGE
+            ? NO_LOCAL_VOICE_MESSAGE
+            : '';
+          if (!available && listenStatus.textContent === READY_MESSAGE) {
+            listenStatus.textContent = '';
+          } else if (available && listenStatus.textContent === '') {
+            listenStatus.textContent = READY_MESSAGE;
+          }
+        };
+
+        const stop = (message = 'Reading stopped.') => {
+          session += 1;
+          if (pauseTimer !== undefined) window.clearTimeout(pauseTimer);
+          synth?.cancel();
+          setListening(false);
+          listenStatus.textContent = message;
+          refreshVoiceAvailability();
+        };
+
+        if (!synth || typeof Utterance !== 'function' || stanzas.length === 0) {
+          listenButton.disabled = true;
+          listenButton.title = 'Read-aloud is unavailable in this browser.';
+          listenStatus.textContent = 'Read-aloud is unavailable in this browser.';
+        } else {
+          const speakStanza = (index: number, activeSession: number) => {
+            if (!listening || activeSession !== session) return;
+            if (index >= stanzas.length) {
+              setListening(false);
+              refreshVoiceAvailability();
+              listenStatus.textContent = 'Finished reading the poem.';
+              return;
+            }
+
+            const utterance = new Utterance(stanzas[index]);
+            utterance.lang = locale;
+            const voice = selectVoice(synth.getVoices(), locale);
+            if (!voice) {
+              stop(VOICE_LOST_MESSAGE);
+              return;
+            }
+            utterance.voice = voice;
+
+            utterance.onend = () => {
+              if (!listening || activeSession !== session) return;
+              pauseTimer = window.setTimeout(() => speakStanza(index + 1, activeSession), 550);
+            };
+            utterance.onerror = (event) => {
+              if (!listening || activeSession !== session) return;
+              if (event.error === 'canceled' || event.error === 'interrupted') return;
+              stop('This browser could not read the poem aloud.');
+            };
+            synth.speak(utterance);
+          };
+
+          listenButton.addEventListener('click', () => {
+            if (listening) {
+              stop();
+              return;
+            }
+
+            session += 1;
+            synth.cancel();
+            setListening(true);
+            listenStatus.textContent = `Reading ${stanzas.length === 1 ? 'the poem' : `${stanzas.length} stanzas`} aloud.`;
+            speakStanza(0, session);
+          });
+
+          synth.addEventListener('voiceschanged', refreshVoiceAvailability);
+          refreshVoiceAvailability();
+
+          window.addEventListener('pagehide', () => stop(''));
+        }
+      }
+
       // Favorites / star button
       import { getFavorites, toggleFavorite, dispatchFavoritesChange } from '../../lib/favorites';
 
