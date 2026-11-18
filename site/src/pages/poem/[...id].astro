@@ -103,7 +103,7 @@ const poemStructuredData = {
               data-poem-listen
               data-poem-language={poem.text_locale}
               aria-label="Listen to poem"
-              aria-describedby="poem-listen-status"
+              aria-describedby="poem-listen-status poem-listen-unavailable"
             >
               <span aria-hidden="true">▶</span>
               <span data-poem-listen-label>Listen</span>
@@ -145,6 +145,7 @@ const poemStructuredData = {
         <p id="poem-listen-status" class="sr-only" aria-live="polite">
           Ready to read this poem aloud.
         </p>
+        <p id="poem-listen-unavailable" class="sr-only" aria-live="polite"></p>
         <p id="poem-reader-instructions" class="sr-only">
           Use Tab to move through poem lines. Press Enter or Space to select a line. Hold Shift while selecting a second line to create a shared range.
         </p>
@@ -638,8 +639,9 @@ const poemStructuredData = {
       const listenButton = document.querySelector<HTMLButtonElement>('[data-poem-listen]');
       const listenLabel = listenButton?.querySelector<HTMLElement>('[data-poem-listen-label]');
       const listenStatus = document.querySelector<HTMLElement>('#poem-listen-status');
+      const listenUnavailable = document.querySelector<HTMLElement>('#poem-listen-unavailable');
 
-      if (listenButton && listenLabel && listenStatus) {
+      if (listenButton && listenLabel && listenStatus && listenUnavailable) {
         const synth = window.speechSynthesis;
         const Utterance = window.SpeechSynthesisUtterance;
         const locale = listenButton.dataset.poemLanguage || document.documentElement.lang || 'en';
@@ -650,7 +652,6 @@ const poemStructuredData = {
         let session = 0;
         let pauseTimer: number | undefined;
         let listening = false;
-        const READY_MESSAGE = 'Ready to read this poem aloud.';
         const NO_LOCAL_VOICE_MESSAGE = 'No local voice is available for this poem\'s language.';
 
         const setListening = (next: boolean) => {
@@ -666,11 +667,7 @@ const poemStructuredData = {
           const available = Boolean(selectVoice(synth.getVoices(), locale));
           listenButton.disabled = listening ? false : !available;
           listenButton.title = available || listening ? '' : NO_LOCAL_VOICE_MESSAGE;
-          if (!available && !listening) {
-            listenStatus.textContent = NO_LOCAL_VOICE_MESSAGE;
-          } else if (available && listenStatus.textContent === NO_LOCAL_VOICE_MESSAGE) {
-            listenStatus.textContent = READY_MESSAGE;
-          }
+          listenUnavailable.textContent = !available && !listening ? NO_LOCAL_VOICE_MESSAGE : '';
         };
 
         const stop = (message = 'Reading stopped.') => {
@@ -700,7 +697,7 @@ const poemStructuredData = {
             utterance.lang = locale;
             const voice = selectVoice(synth.getVoices(), locale);
             if (!voice) {
-              stop(NO_LOCAL_VOICE_MESSAGE);
+              stop();
               return;
             }
             utterance.voice = voice;
